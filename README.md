@@ -4,6 +4,12 @@ A sweet little Discord bot, nya~ She watches your GitHub repos and writes
 changelogs for you, pings you when someone opens a forum post, and tags
 posts when you ask her to.
 
+> [!NOTE]
+> This project is not affiliated with the GitHub account
+> [@meowdere](https://github.com/meowdere). The bot's name is a coincidence,
+> and it isn't trying to impersonate that account or its owner. Meowdere is
+> made by [@creeperdiamonds](https://github.com/creeperdiamonds).
+
 ## What she does
 
 - **Changelogs.** New commits on the tracked branch go into one **Unreleased**
