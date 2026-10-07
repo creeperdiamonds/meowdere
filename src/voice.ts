@@ -46,6 +46,7 @@ export const voice = {
     ]) + (seconds ? `\n-# Pinging them gets a little ${duration(seconds)} timeout. Your message stays right here.` : ""),
 
   marked: (tags: string[]) => `Marked as ${list(tags)}, nya~`,
+  fixedLocked: () => "Marked as **Fixed** and locked. All done here, nya~",
   unmarked: (tags: string[]) => `Took off ${list(tags)} for you.`,
   unmarkedAll: () => "All tags off, squeaky clean, nya~",
   alreadyMarked: (tags: string[]) => `It's already marked as ${list(tags)}, silly.`,
@@ -58,7 +59,7 @@ export const voice = {
   help: () =>
     [
       "Hiii, I'm **Meowdere**! In a forum post you can say:",
-      "`@Meowdere fixed`: I'll tag it **Fixed**",
+      "`@Meowdere fixed`: I'll tag it **Fixed** and lock it",
       "`@Meowdere mark as <tag>`: I'll add it (several: `mark as bug, urgent`)",
       "`@Meowdere unmark <tag>`: I'll take it off",
       "`@Meowdere unmark`: I'll take every tag off",

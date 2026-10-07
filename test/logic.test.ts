@@ -85,9 +85,9 @@ test("commits name the posts they fix, by Discord post ID only", () => {
   assert.deepEqual(fixesIn("Resolved: #1425012345678901234"), ["1425012345678901234"]);
 });
 
-test("@Meowdere fixed is a shortcut for mark as Fixed", () => {
-  assert.deepEqual(parseCommand("fixed"), { kind: "mark", names: ["Fixed"] });
-  assert.deepEqual(parseCommand("Fixed!"), { kind: "mark", names: ["Fixed"] });
+test("@Meowdere fixed tags the post Fixed and locks it", () => {
+  assert.deepEqual(parseCommand("fixed"), { kind: "mark", names: ["Fixed"], lock: true });
+  assert.deepEqual(parseCommand("Fixed!"), { kind: "mark", names: ["Fixed"], lock: true });
 });
 
 test("owner pings: a short timeout by default, never a ping back", () => {

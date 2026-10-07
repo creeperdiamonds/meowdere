@@ -4,7 +4,7 @@
 // typed name to one of the forum's tags. No Discord here either.
 
 export type Command =
-  | { kind: "mark"; names: string[] }
+  | { kind: "mark"; names: string[]; lock?: boolean }
   | { kind: "unmark"; names: string[] }
   | { kind: "unmarkAll" }
   | { kind: "tags" }
@@ -15,7 +15,8 @@ export function parseCommand(text: string): Command {
   const t = text.trim().replace(/\s+/g, " ");
   const names = (s: string) => s.split(",").map((n) => n.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
   // "@Meowdere fixed": the everyday case, short enough to type in passing.
-  if (/^(mark as )?fixed[.!~]*$/i.test(t)) return { kind: "mark", names: ["Fixed"] };
+  // It closes the report too: tagged Fixed and locked.
+  if (/^fixed[.!~]*$/i.test(t)) return { kind: "mark", names: ["Fixed"], lock: true };
   let m = t.match(/^mark(?: as)? (.+)$/i);
   if (m) return { kind: "mark", names: names(m[1]) };
   if (/^(unmark|clear)( all)?$/i.test(t)) return { kind: "unmarkAll" };
