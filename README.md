@@ -29,6 +29,7 @@ posts when you ask her to.
   are left alone.
 - **Tags.** In any forum post:
   - `@Meowdere fixed` to tag it **Fixed** and lock it
+  - `@Meowdere completed` to tag it **Completed** and lock it
   - `@Meowdere mark as <tag>` (several at once: `mark as bug, urgent`)
   - `@Meowdere unmark <tag>`, or `@Meowdere unmark` to remove them all
   - `@Meowdere tags` to list the forum's tags

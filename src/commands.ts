@@ -14,9 +14,10 @@ export type Command =
 export function parseCommand(text: string): Command {
   const t = text.trim().replace(/\s+/g, " ");
   const names = (s: string) => s.split(",").map((n) => n.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
-  // "@Meowdere fixed": the everyday case, short enough to type in passing.
-  // It closes the report too: tagged Fixed and locked.
+  // "@Meowdere fixed" / "@Meowdere completed": the everyday cases, short
+  // enough to type in passing. They close the post too: tagged and locked.
   if (/^fixed[.!~]*$/i.test(t)) return { kind: "mark", names: ["Fixed"], lock: true };
+  if (/^complete[d]?[.!~]*$/i.test(t)) return { kind: "mark", names: ["Completed"], lock: true };
   let m = t.match(/^mark(?: as)? (.+)$/i);
   if (m) return { kind: "mark", names: names(m[1]) };
   if (/^(unmark|clear)( all)?$/i.test(t)) return { kind: "unmarkAll" };

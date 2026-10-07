@@ -293,14 +293,14 @@ async function handleCommand(msg: Message<true>, text: string) {
   const names = chosen.map((t) => t.name);
 
   if (cmd.kind === "mark" && cmd.lock) {
-    // "@Meowdere fixed": tag it (unless it already is), say so, then lock.
+    // "@Meowdere fixed" / "completed": tag it (unless it already is), say so, then lock.
     // She replies before locking so her message lands in an open post.
     const add = chosen.filter((t) => !current.includes(t.id)).map((t) => t.id);
     if (add.length && current.length + add.length > 5) return reply(voice.tooManyTags());
     if (add.length && !(await setTags([...current, ...add]))) return;
-    await reply(voice.fixedLocked());
+    await reply(voice.closedLocked(chosen[0].name));
     try {
-      await thread.setLocked(true, `Marked fixed by ${msg.author.tag}`);
+      await thread.setLocked(true, `Marked ${chosen[0].name} by ${msg.author.tag}`);
     } catch {
       await reply(voice.cantEdit());
     }
