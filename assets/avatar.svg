@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffb3d1"/>
+      <stop offset="1" stop-color="#c7a8ff"/>
+    </linearGradient>
+    <radialGradient id="fur" cx="0.5" cy="0.4" r="0.65">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#fff0f6"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="512" height="512" fill="url(#bg)"/>
+
+  <!-- sparkles -->
+  <g fill="#ffffff" opacity="0.85">
+    <path d="M78 96 l7 18 18 7 -18 7 -7 18 -7 -18 -18 -7 18 -7z"/>
+    <path d="M440 380 l5 13 13 5 -13 5 -5 13 -5 -13 -13 -5 13 -5z"/>
+    <path d="M70 400 l4 10 10 4 -10 4 -4 10 -4 -10 -10 -4 10 -4z"/>
+  </g>
+
+  <!-- ears -->
+  <path d="M118 238 L132 92 Q138 70 158 82 L246 150 Z" fill="url(#fur)" stroke="#5b3a6e" stroke-width="10" stroke-linejoin="round"/>
+  <path d="M394 238 L380 92 Q374 70 354 82 L266 150 Z" fill="url(#fur)" stroke="#5b3a6e" stroke-width="10" stroke-linejoin="round"/>
+  <path d="M146 196 L154 118 L210 160 Z" fill="#ff9cc2"/>
+  <path d="M366 196 L358 118 L302 160 Z" fill="#ff9cc2"/>
+
+  <!-- head -->
+  <ellipse cx="256" cy="300" rx="168" ry="146" fill="url(#fur)" stroke="#5b3a6e" stroke-width="10"/>
+
+  <!-- happy closed eyes -->
+  <path d="M168 290 Q196 258 224 290" fill="none" stroke="#5b3a6e" stroke-width="12" stroke-linecap="round"/>
+  <path d="M288 290 Q316 258 344 290" fill="none" stroke="#5b3a6e" stroke-width="12" stroke-linecap="round"/>
+
+  <!-- blush -->
+  <ellipse cx="166" cy="334" rx="30" ry="17" fill="#ff8fb8" opacity="0.75"/>
+  <ellipse cx="346" cy="334" rx="30" ry="17" fill="#ff8fb8" opacity="0.75"/>
+
+  <!-- nose and w mouth -->
+  <path d="M248 316 L264 316 L256 326 Z" fill="#ff7aa8" stroke="#5b3a6e" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M230 336 Q243 352 256 336 Q269 352 282 336" fill="none" stroke="#5b3a6e" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- whiskers -->
+  <g stroke="#5b3a6e" stroke-width="6" stroke-linecap="round" opacity="0.7">
+    <path d="M110 318 L60 308"/>
+    <path d="M112 342 L64 348"/>
+    <path d="M402 318 L452 308"/>
+    <path d="M400 342 L448 348"/>
+  </g>
+
+  <!-- heart -->
+  <path d="M400 150 C400 128 428 120 440 140 C452 120 480 128 480 150 C480 176 452 190 440 204 C428 190 400 176 400 150 Z" fill="#ff5c99" stroke="#5b3a6e" stroke-width="8" stroke-linejoin="round" transform="rotate(14 440 160)"/>
+</svg>
