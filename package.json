@@ -1,0 +1,22 @@
+{
+  "name": "meowdere",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Meowdere: a deredere Discord bot. GitHub commits and deploys become forum changelogs; @Meowdere mark as <tag> for forum posts.",
+  "type": "module",
+  "engines": {
+    "node": ">=23.6"
+  },
+  "scripts": {
+    "start": "node src/index.ts",
+    "test": "node --test \"test/*.test.ts\"",
+    "check": "tsc -p ."
+  },
+  "dependencies": {
+    "discord.js": "^14.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "typescript": "^5.9.3"
+  }
+}
