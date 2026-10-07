@@ -1,7 +1,7 @@
 // src/state.ts
 //
 // What Meowdere remembers between restarts, in one small JSON file: where it
-// got to on each repo, and the open "Unreleased" post.
+// got to on each repo, and its "Unreleased" message.
 
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import type { Commit } from "./github.ts";
@@ -11,8 +11,8 @@ export interface RepoState {
   lastSha: string | null;
   /** Commits not yet deployed, oldest first. */
   pending: Commit[];
-  /** The open "Unreleased" forum post, if there is one. */
-  unreleasedThreadId: string | null;
+  /** The "Unreleased" message in the changelog channel, if there is one. */
+  unreleasedMessageId: string | null;
   /** Deploy runs already reported, newest last, kept short. */
   seenRuns: number[];
 }
@@ -34,5 +34,5 @@ export function saveState(file: string, state: State): void {
 }
 
 export function repoState(state: State, repo: string): RepoState {
-  return (state[repo] ??= { lastSha: null, pending: [], unreleasedThreadId: null, seenRuns: [] });
+  return (state[repo] ??= { lastSha: null, pending: [], unreleasedMessageId: null, seenRuns: [] });
 }

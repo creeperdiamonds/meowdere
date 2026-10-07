@@ -1,44 +1,58 @@
-# Meowdere 💕
+# Meowdere
 
-A sweet little Discord bot, nya~ She watches your GitHub repos and turns commits
-and deploys into forum changelogs, pings you on new forum posts, and tags posts
-when you ask her to.
+A sweet little Discord bot, nya~ She watches your GitHub repos and writes
+changelogs for you, pings you when someone opens a forum post, and tags
+posts when you ask her to.
 
 ## What she does
 
-- **Changelogs.** New commits on the tracked branch go into an **Unreleased** post
-  in your changelog forum, and she keeps that list up to date as you push. When the
-  deploy workflow succeeds, the post becomes the release: renamed, tagged
-  **Deployed**, you're pinged, and it's archived. A failed deploy pings you in the
-  same post and tags it **Deploy failed**.
-- **New posts.** Every new post in the forums you list in `WATCH_FORUM_IDS` pings you.
+- **Changelogs.** New commits on the tracked branch go into one **Unreleased**
+  message in your changelog channel, which she keeps up to date as you push.
+  When the deploy workflow succeeds, that message becomes the release's
+  changelog and she replies to it, pinging you. If a deploy fails she tells
+  you, and the commits wait for the next one.
+- **New posts.** Every new post in the forums you list (a bug-reports forum,
+  say) pings you.
 - **Tags.** In any forum post:
   - `@Meowdere mark as <tag>` (several at once: `mark as bug, urgent`)
   - `@Meowdere unmark <tag>`, or `@Meowdere unmark` to remove them all
   - `@Meowdere tags` to list the forum's tags
 
-  Only you and people with Manage Threads can change tags.
+  Only the owner and people with Manage Threads can change tags.
 
 She checks GitHub once a minute through its API, so she needs no public URL or
-webhook. She can run on any PC.
+webhook and runs fine on a home PC.
 
 ## Setup
 
+You need Node 23.6 or newer. She runs TypeScript directly, with no build step.
+
 1. In the [Discord Developer Portal](https://discord.com/developers/applications),
-   create an application named **Meowdere**. Under **Bot**, reset the token and
-   copy it. She needs no privileged intents.
+   create an application. Under **Bot**, reset the token and copy it. She needs
+   no privileged intents.
 2. Invite her (replace `APP_ID`):
-   `https://discord.com/oauth2/authorize?client_id=APP_ID&scope=bot&permissions=292057844752`
-   (View Channels, Send Messages, Send Messages in Threads, Read Message History,
-   Manage Threads, Manage Channels; Manage Channels is only used once, to add the
-   changelog tags to the forum).
-3. `cp .env.example .env` and fill it in.
-4. `npm install`, then `npm start`.
+   `https://discord.com/oauth2/authorize?client_id=APP_ID&scope=bot&permissions=292057844736`
+   (View Channels, Send Messages, Send Messages in Threads, Read Message
+   History, Manage Threads)
+3. Copy `.env.example` to `.env` and put in your Discord token and a GitHub token
+   that can read the repos (for example, `gh auth token`).
+4. Copy `meowdere.config.example.json` to `meowdere.config.json` and fill it in:
+
+   | Setting | What it is |
+   | --- | --- |
+   | `ownerId` | Your Discord user ID: the person she pings |
+   | `changelogChannelId` | The text channel changelogs go to |
+   | `watchForumIds` | Forums where new posts ping you |
+   | `repos` | Each repo, its `branch` (default `main`) and its `deployWorkflow` file. Leave the workflow out to track commits only. |
+   | `pollSeconds` | How often to check GitHub (default 60, minimum 30) |
+
+   To copy IDs, turn on Developer Mode in Discord, then right-click → Copy ID.
+5. `npm install`, then `npm start`.
 
 On the first start she only notes where each repo is. She won't post its history.
 
 ## Development
 
-- `npm test`: the changelog, command and tag-matching logic
+- `npm test`: the changelog, config, command and tag-matching logic
 - `npm run check`: type-check
-- What she says lives in `src/voice.ts`.
+- Everything she says is in `src/voice.ts`.

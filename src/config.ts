@@ -1,51 +1,82 @@
 // src/config.ts
 //
-// Everything Meowdere needs, read once from the environment (.env).
+// Settings live in meowdere.config.json (copy meowdere.config.example.json).
+// The two secrets, the Discord and GitHub tokens, stay in .env.
+
+import { readFileSync } from "node:fs";
 
 export interface RepoConfig {
   /** owner/name */
   repo: string;
   branch: string;
-  /** The workflow file whose runs count as deploys, e.g. deploy-merged.yml. */
+  /** The workflow file whose runs count as deploys, e.g. deploy-merged.yml. Null: commits only. */
   deployWorkflow: string | null;
 }
 
 export interface Config {
   token: string;
-  ownerId: string;
   githubToken: string;
-  repos: RepoConfig[];
-  changelogForumId: string;
+  ownerId: string;
+  /** The text channel changelogs go to. */
+  changelogChannelId: string;
   /** Forums where every new post pings the owner. */
   watchForumIds: string[];
+  repos: RepoConfig[];
   pollSeconds: number;
   stateFile: string;
 }
 
-/** "owner/name@branch:workflow.yml", with the branch and workflow optional. */
-export function parseRepo(spec: string): RepoConfig {
-  const m = spec.trim().match(/^([\w.-]+\/[\w.-]+)(?:@([^:]+))?(?::(.+))?$/);
-  if (!m) throw new Error(`REPOS: can't read "${spec}". Use owner/name@branch:workflow.yml`);
-  return { repo: m[1], branch: m[2] ?? "main", deployWorkflow: m[3] ?? null };
+interface FileConfig {
+  ownerId?: unknown;
+  changelogChannelId?: unknown;
+  watchForumIds?: unknown;
+  repos?: unknown;
+  pollSeconds?: unknown;
 }
 
-const list = (v: string | undefined) => (v ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+const snowflake = (v: unknown, name: string): string => {
+  if (typeof v !== "string" || !/^\d{17,20}$/.test(v)) throw new Error(`${name} must be a Discord ID in quotes, like "123456789012345678"`);
+  return v;
+};
 
-export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const need = (name: string) => {
+function parseRepo(v: unknown, i: number): RepoConfig {
+  const r = (v ?? {}) as Record<string, unknown>;
+  if (typeof r.repo !== "string" || !/^[\w.-]+\/[\w.-]+$/.test(r.repo)) throw new Error(`repos[${i}].repo must look like "owner/name"`);
+  return {
+    repo: r.repo,
+    branch: typeof r.branch === "string" && r.branch ? r.branch : "main",
+    deployWorkflow: typeof r.deployWorkflow === "string" && r.deployWorkflow ? r.deployWorkflow : null,
+  };
+}
+
+/** Checks the file's settings, so a typo fails at startup with a clear message. */
+export function parseConfig(file: FileConfig, env: NodeJS.ProcessEnv): Config {
+  const secret = (name: string) => {
     const v = env[name]?.trim();
     if (!v) throw new Error(`Missing ${name} in .env (see .env.example)`);
     return v;
   };
-  const repos = list(need("REPOS")).map(parseRepo);
+  if (!Array.isArray(file.repos) || file.repos.length === 0) throw new Error("repos needs at least one repo");
+  const forums = file.watchForumIds ?? [];
+  if (!Array.isArray(forums)) throw new Error("watchForumIds must be a list");
   return {
-    token: need("DISCORD_TOKEN"),
-    ownerId: need("OWNER_ID"),
-    githubToken: need("GITHUB_TOKEN"),
-    repos,
-    changelogForumId: need("CHANGELOG_FORUM_ID"),
-    watchForumIds: list(env.WATCH_FORUM_IDS),
-    pollSeconds: Math.max(30, Number(env.POLL_SECONDS) || 60),
+    token: secret("DISCORD_TOKEN"),
+    githubToken: secret("GITHUB_TOKEN"),
+    ownerId: snowflake(file.ownerId, "ownerId"),
+    changelogChannelId: snowflake(file.changelogChannelId, "changelogChannelId"),
+    watchForumIds: forums.map((f, i) => snowflake(f, `watchForumIds[${i}]`)),
+    repos: file.repos.map(parseRepo),
+    pollSeconds: Math.max(30, Number(file.pollSeconds) || 60),
     stateFile: env.STATE_FILE?.trim() || "state.json",
   };
+}
+
+export function loadConfig(path = "meowdere.config.json", env: NodeJS.ProcessEnv = process.env): Config {
+  let raw: string;
+  try {
+    raw = readFileSync(path, "utf8");
+  } catch {
+    throw new Error(`No ${path}. Copy meowdere.config.example.json to ${path} and fill it in.`);
+  }
+  return parseConfig(JSON.parse(raw) as FileConfig, env);
 }

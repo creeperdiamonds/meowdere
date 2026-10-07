@@ -1,12 +1,14 @@
 // src/index.ts
 //
-// Meowdere: GitHub commits and deploys become forum changelogs, new forum
-// posts ping the owner, and "@Meowdere mark as <tag>" tags a post.
+// Meowdere: GitHub commits and deploys become changelogs in a text channel,
+// new posts in watched forums ping the owner, and "@Meowdere mark as <tag>"
+// tags a forum post.
 //
-// A changelog's life: new commits on the branch open an "Unreleased" post
-// (or add to the open one). When the deploy workflow succeeds, that post
-// becomes the release: renamed, tagged Deployed, the owner pinged, archived.
-// A failed deploy pings the owner in the same post and leaves it open.
+// A changelog's life: new commits on the branch start an "Unreleased"
+// message in the changelog channel, which she keeps editing as more arrive.
+// When the deploy workflow succeeds, that message becomes the release's
+// changelog and she replies to it, pinging the owner. A failed deploy is a
+// reply too, and the commits wait for the next one.
 
 import { existsSync } from "node:fs";
 import {
@@ -15,13 +17,12 @@ import {
   Events,
   GatewayIntentBits,
   PermissionFlagsBits,
-  type AnyThreadChannel,
-  type ForumChannel,
   type Message,
+  type TextChannel,
 } from "discord.js";
 import { loadConfig, type RepoConfig } from "./config.ts";
 import { GitHub, newSince, type Run } from "./github.ts";
-import { releasedBody, releasedTitle, shipped, unreleasedBody, unreleasedTitle } from "./changelog.ts";
+import { releasedBody, shipped, unreleasedBody } from "./changelog.ts";
 import { matchTag, parseCommand, type Tag } from "./commands.ts";
 import { loadState, repoState, saveState, type RepoState } from "./state.ts";
 import { voice } from "./voice.ts";
@@ -40,48 +41,20 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBit
 const pingOwner = { parse: [], users: [config.ownerId] } as const;
 const pingNobody = { parse: [] } as const;
 
-// ---- the changelog forum ----
+// ---- the changelog channel ----
 
-const CHANGELOG_TAGS = [
-  { name: "Unreleased", emoji: "🔧" },
-  { name: "Deployed", emoji: "🚀" },
-  { name: "Deploy failed", emoji: "😿" },
-];
-
-async function changelogForum(): Promise<ForumChannel> {
-  const channel = await client.channels.fetch(config.changelogForumId);
-  if (channel?.type !== ChannelType.GuildForum) throw new Error("CHANGELOG_FORUM_ID isn't a forum channel");
-  return channel;
-}
-
-/** Adds the changelog tags the forum is missing. Needs Manage Channels; without it posts just go untagged. */
-async function ensureChangelogTags(forum: ForumChannel) {
-  const missing = CHANGELOG_TAGS.filter((w) => !forum.availableTags.some((t) => t.name.toLowerCase() === w.name.toLowerCase()));
-  if (missing.length === 0) return;
-  try {
-    await forum.setAvailableTags([
-      ...forum.availableTags,
-      ...missing.map((m) => ({ name: m.name, emoji: { id: null, name: m.emoji } })),
-    ]);
-    log("Added changelog tags:", missing.map((m) => m.name).join(", "));
-  } catch (err) {
-    log("Couldn't add changelog tags (give me Manage Channels on the forum, or add them yourself):", String(err));
+async function changelogChannel(): Promise<TextChannel> {
+  const channel = await client.channels.fetch(config.changelogChannelId);
+  if (channel?.type !== ChannelType.GuildText && channel?.type !== ChannelType.GuildAnnouncement) {
+    throw new Error("changelogChannelId isn't a text channel");
   }
+  return channel as TextChannel;
 }
 
-function tagIds(forum: ForumChannel, ...names: string[]): string[] {
-  return names
-    .map((n) => forum.availableTags.find((t) => t.name.toLowerCase() === n.toLowerCase())?.id)
-    .filter((id): id is string => Boolean(id));
-}
-
-async function openThread(id: string | null): Promise<AnyThreadChannel | null> {
+async function unreleasedMessage(channel: TextChannel, id: string | null): Promise<Message | null> {
   if (!id) return null;
   try {
-    const channel = await client.channels.fetch(id);
-    if (!channel?.isThread()) return null;
-    if (channel.archived) await channel.setArchived(false);
-    return channel;
+    return await channel.messages.fetch(id);
   } catch {
     return null; // deleted by hand: start a fresh one
   }
@@ -90,70 +63,52 @@ async function openThread(id: string | null): Promise<AnyThreadChannel | null> {
 /** The intro line is kept when the list is redrawn, so an edit doesn't change her words. */
 const introOf = (content: string) => content.split("\n\n")[0];
 
-async function addToUnreleased(rc: RepoConfig, st: RepoState, added: number) {
-  const forum = await changelogForum();
-  const thread = await openThread(st.unreleasedThreadId);
-  if (thread) {
-    const starter = await thread.fetchStarterMessage();
-    if (starter) await starter.edit({ content: unreleasedBody(introOf(starter.content), rc.repo, rc.branch, st.pending), allowedMentions: pingNobody });
-    await thread.send({ content: voice.morePushed(added), allowedMentions: pingNobody });
+async function addToUnreleased(rc: RepoConfig, st: RepoState) {
+  const channel = await changelogChannel();
+  const existing = await unreleasedMessage(channel, st.unreleasedMessageId);
+  if (existing) {
+    await existing.edit({ content: unreleasedBody(introOf(existing.content), rc.repo, rc.branch, st.pending), allowedMentions: pingNobody });
     return;
   }
-  const created = await forum.threads.create({
-    name: unreleasedTitle(rc.repo),
-    message: { content: unreleasedBody(voice.unreleasedIntro(config.ownerId), rc.repo, rc.branch, st.pending), allowedMentions: pingOwner },
-    appliedTags: tagIds(forum, "Unreleased"),
-  });
-  st.unreleasedThreadId = created.id;
-  log(`${rc.repo}: opened Unreleased post ${created.id}`);
+  const sent = await channel.send({ content: unreleasedBody(voice.unreleasedIntro(), rc.repo, rc.branch, st.pending), allowedMentions: pingNobody });
+  st.unreleasedMessageId = sent.id;
+  log(`${rc.repo}: started an Unreleased message`);
 }
 
 async function reportRun(rc: RepoConfig, st: RepoState, run: Run) {
-  const forum = await changelogForum();
   const failed = run.conclusion === "failure" || run.conclusion === "timed_out";
   if (run.conclusion !== "success" && !failed) return; // cancelled or skipped: nothing to say
+  const channel = await changelogChannel();
+  const existing = await unreleasedMessage(channel, st.unreleasedMessageId);
 
   if (failed) {
-    const thread = await openThread(st.unreleasedThreadId);
-    if (thread) {
-      await thread.send({ content: voice.deployFailed(config.ownerId, run.number, run.url), allowedMentions: pingOwner });
-      await thread.setAppliedTags([...new Set([...thread.appliedTags, ...tagIds(forum, "Deploy failed")])].slice(0, 5));
-    } else {
-      await forum.threads.create({
-        name: `${rc.repo.split("/")[1]} · deploy #${run.number} failed`,
-        message: { content: voice.deployFailed(config.ownerId, run.number, run.url), allowedMentions: pingOwner },
-        appliedTags: tagIds(forum, "Deploy failed"),
-      });
-    }
+    const content = voice.deployFailed(config.ownerId, run.number, run.url);
+    if (existing) await existing.reply({ content, allowedMentions: pingOwner });
+    else await channel.send({ content, allowedMentions: pingOwner });
     log(`${rc.repo}: deploy #${run.number} failed`);
     return;
   }
 
   const { shipped: done, left } = shipped(st.pending, run.headSha);
-  const thread = done.length ? await openThread(st.unreleasedThreadId) : null;
-  const name = releasedTitle(rc.repo, done, new Date());
-  const body = releasedBody(done.length ? "💕 Shipped with love, nya~" : voice.redeployed(config.ownerId), rc.repo, done, run.number, run.url);
-
-  if (thread) {
-    const starter = await thread.fetchStarterMessage();
-    if (starter) await starter.edit({ content: body, allowedMentions: pingNobody });
-    await thread.send({ content: voice.deployed(config.ownerId), allowedMentions: pingOwner });
-    await thread.edit({ name, appliedTags: tagIds(forum, "Deployed") });
-    await thread.setArchived(true);
-  } else {
-    const created = await forum.threads.create({
-      name,
-      message: { content: body, allowedMentions: pingOwner },
-      appliedTags: tagIds(forum, "Deployed"),
+  if (done.length && existing) {
+    await existing.edit({ content: releasedBody(voice.shippedIntro(), rc.repo, done, run.number, run.url, new Date()), allowedMentions: pingNobody });
+    await existing.reply({ content: voice.deployed(config.ownerId), allowedMentions: pingOwner });
+  } else if (done.length) {
+    await channel.send({
+      content: `${voice.deployed(config.ownerId)}\n${releasedBody(voice.shippedIntro(), rc.repo, done, run.number, run.url, new Date())}`,
+      allowedMentions: pingOwner,
     });
-    await created.setArchived(true);
+  } else {
+    await channel.send({ content: voice.redeployed(config.ownerId), allowedMentions: pingOwner });
   }
   log(`${rc.repo}: deploy #${run.number} shipped ${done.length} commit(s)`);
 
-  st.pending = left;
-  st.unreleasedThreadId = null;
-  // Commits pushed after what this run deployed get a fresh Unreleased post.
-  if (left.length) await addToUnreleased(rc, st, left.length);
+  if (done.length) {
+    st.pending = left;
+    st.unreleasedMessageId = null;
+    // Commits pushed after what this run deployed get a fresh Unreleased message.
+    if (left.length) await addToUnreleased(rc, st);
+  }
 }
 
 async function pollRepo(rc: RepoConfig) {
@@ -176,7 +131,7 @@ async function pollRepo(rc: RepoConfig) {
     st.pending.push(...fresh);
     st.lastSha = commits[0].sha;
     save();
-    await addToUnreleased(rc, st, fresh.length);
+    await addToUnreleased(rc, st);
     save();
   }
 
@@ -184,7 +139,7 @@ async function pollRepo(rc: RepoConfig) {
     const runs = await github.runs(rc.repo, rc.deployWorkflow);
     const finished = runs.filter((r) => r.status === "completed" && !st.seenRuns.includes(r.id)).reverse();
     for (const run of finished) {
-      // Seen first, so one bad post can't make it report the same run forever.
+      // Seen first, so one bad message can't make it report the same run forever.
       st.seenRuns = [...st.seenRuns, run.id].slice(-60);
       save();
       await reportRun(rc, st, run);
@@ -214,7 +169,7 @@ async function pollAll() {
 
 client.on(Events.ThreadCreate, async (thread, newlyCreated) => {
   if (!newlyCreated || !thread.parentId || !config.watchForumIds.includes(thread.parentId)) return;
-  if (thread.ownerId === client.user?.id) return; // her own posts already ping
+  if (thread.ownerId === client.user?.id) return;
   // A brand-new forum post can refuse messages until its first one lands.
   await new Promise((r) => setTimeout(r, 1500));
   try {
@@ -294,7 +249,7 @@ async function handleCommand(msg: Message<true>, text: string) {
 client.once(Events.ClientReady, async (c) => {
   log(`Logged in as ${c.user.tag}, nya~ Watching ${config.repos.map((r) => r.repo).join(", ")}`);
   try {
-    await ensureChangelogTags(await changelogForum());
+    await changelogChannel();
   } catch (err) {
     log(String(err));
   }

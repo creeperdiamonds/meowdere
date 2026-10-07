@@ -2,7 +2,7 @@
   "name": "meowdere",
   "version": "0.1.0",
   "private": true,
-  "description": "Meowdere: a deredere Discord bot. GitHub commits and deploys become forum changelogs; @Meowdere mark as <tag> for forum posts.",
+  "description": "Meowdere: a deredere Discord bot that writes changelogs from GitHub commits and deploys, pings you on new forum posts, and tags them on request.",
   "type": "module",
   "engines": {
     "node": ">=23.6"

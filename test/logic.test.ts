@@ -1,18 +1,24 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseRepo } from "../src/config.ts";
+import { parseConfig } from "../src/config.ts";
 import { newSince, type Commit } from "../src/github.ts";
-import { commitList, releasedTitle, shipped, unreleasedBody } from "../src/changelog.ts";
+import { commitList, releasedBody, shipped, unreleasedBody } from "../src/changelog.ts";
 import { matchTag, parseCommand } from "../src/commands.ts";
 import { pick, voice } from "../src/voice.ts";
 
 const c = (sha: string, title = `Commit ${sha}`): Commit => ({ sha, title, author: "creeperdiamonds", url: `https://github.com/x/y/commit/${sha}` });
 
-test("repo specs: branch and workflow are optional", () => {
-  assert.deepEqual(parseRepo("creeperdiamonds/appealy@main:deploy-merged.yml"), { repo: "creeperdiamonds/appealy", branch: "main", deployWorkflow: "deploy-merged.yml" });
-  assert.deepEqual(parseRepo("a/b"), { repo: "a/b", branch: "main", deployWorkflow: null });
-  assert.deepEqual(parseRepo("a/b:ci.yml"), { repo: "a/b", branch: "main", deployWorkflow: "ci.yml" });
-  assert.throws(() => parseRepo("nope"));
+const env = { DISCORD_TOKEN: "t", GITHUB_TOKEN: "g" };
+const id = "123456789012345678";
+
+test("config: defaults filled in, mistakes caught at startup", () => {
+  const cfg = parseConfig({ ownerId: id, changelogChannelId: id, watchForumIds: [id], repos: [{ repo: "a/b" }] }, env);
+  assert.deepEqual(cfg.repos, [{ repo: "a/b", branch: "main", deployWorkflow: null }]);
+  assert.equal(cfg.pollSeconds, 60);
+  assert.throws(() => parseConfig({ ownerId: 123, changelogChannelId: id, repos: [{ repo: "a/b" }] }, env), /ownerId/);
+  assert.throws(() => parseConfig({ ownerId: id, changelogChannelId: id, repos: [] }, env), /repos/);
+  assert.throws(() => parseConfig({ ownerId: id, changelogChannelId: id, repos: [{ repo: "nope" }] }, env), /owner\/name/);
+  assert.throws(() => parseConfig({ ownerId: id, changelogChannelId: id, repos: [{ repo: "a/b" }] }, {}), /DISCORD_TOKEN/);
 });
 
 test("new commits come back oldest first, stopping at the last seen", () => {
@@ -37,10 +43,10 @@ test("long changelogs fit in one Discord message", () => {
   assert.match(commitList([]), /redeploy/);
 });
 
-test("release titles name the newest change and fit Discord's 100", () => {
-  const title = releasedTitle("creeperdiamonds/appealy", [c("a", "First"), c("b", "Show form descriptions")], new Date("2026-10-07T12:00:00Z"));
-  assert.equal(title, "appealy · 7 Oct 2026 · Show form descriptions (+1)");
-  assert.ok(releasedTitle("a/b", [c("a", "x".repeat(300))], new Date()).length <= 100);
+test("a release is headed with the repo and date", () => {
+  const body = releasedBody("Shipped!", "creeperdiamonds/appealy", [c("a", "Show form descriptions")], 93, "u", new Date("2026-10-07T12:00:00Z"));
+  assert.ok(body.startsWith("## appealy · 7 Oct 2026\nShipped! Deployed in [run #93]"), body);
+  assert.match(body, /Show form descriptions/);
 });
 
 test("commands: mark, unmark, several tags, and help for anything else", () => {
@@ -61,12 +67,13 @@ test("tag names match loosely but never guess between two", () => {
   assert.ok("error" in matchTag("", tags));
 });
 
-test("Meowdere always pings the owner in what she posts", () => {
+test("Meowdere pings the owner on deploys and new posts, and keeps emoji rare", () => {
   for (let i = 0; i < 10; i++) {
-    for (const line of [voice.unreleasedIntro("42"), voice.deployed("42"), voice.newPost("42"), voice.deployFailed("42", 1, "u")]) {
+    for (const line of [voice.deployed("42"), voice.newPost("42"), voice.deployFailed("42", 1, "u")]) {
       assert.match(line, /<@42>/);
     }
   }
   assert.equal(pick(["a", "b"], () => 0.99), "b");
-  assert.equal(voice.marked(["Bug", "High"]), "✨ Marked as **Bug** and **High**, nya~");
+  assert.equal(voice.marked(["Bug", "High"]), "Marked as **Bug** and **High**, nya~");
+  for (let i = 0; i < 20; i++) assert.doesNotMatch(voice.unreleasedIntro(), /<@/, "a push alone doesn't ping");
 });
