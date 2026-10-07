@@ -114,7 +114,7 @@ async function reportRun(rc: RepoConfig, st: RepoState, run: Run) {
 
 /**
  * Shipped commits that said "fixes #<post ID>": tag those posts Fixed and
- * tell whoever opened them. Only posts in the watched forums, so a commit
+ * tell whoever opened them, then lock them. Only posts in the watched forums, so a commit
  * message can't make her post anywhere else.
  */
 async function markFixed(commits: Commit[]) {
@@ -131,7 +131,9 @@ async function markFixed(commits: Commit[]) {
         }
         const reporter = thread.ownerId ?? null;
         await thread.send({ content: voice.fixShipped(reporter, commit.sha, commit.url), allowedMentions: { parse: [], users: reporter ? [reporter] : [] } });
-        log(`Marked post ${postId} fixed by ${commit.sha.slice(0, 7)}`);
+        // Locked last, after her message: the report is done, so no more replies.
+        await thread.setLocked(true, `Fixed in ${commit.sha.slice(0, 7)}`);
+        log(`Marked post ${postId} fixed by ${commit.sha.slice(0, 7)} and locked it`);
       } catch (err) {
         log(`Couldn't mark post ${postId} fixed:`, String(err));
       }

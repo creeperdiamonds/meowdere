@@ -15,7 +15,7 @@ posts when you ask her to.
   say) pings you.
 - **Fixed, from a commit.** Put `fixes #<post ID>` in a commit message (her
   ping on each new post shows the exact line). When that commit is deployed,
-  she tags the post **Fixed** and tells whoever opened it that it's live.
+  she tags the post **Fixed**, tells whoever opened it that it's live, and locks it.
 - **Pinging the owner.** Anyone who pings you gets a short timeout (a minute by
   default, no escalation) and a gentle reply: "<you> may be busy right now.
   Please be patient". Their message isn't deleted, and her reply shows your name
