@@ -14,6 +14,8 @@ export type Command =
 export function parseCommand(text: string): Command {
   const t = text.trim().replace(/\s+/g, " ");
   const names = (s: string) => s.split(",").map((n) => n.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
+  // "@Meowdere fixed": the everyday case, short enough to type in passing.
+  if (/^(mark as )?fixed[.!~]*$/i.test(t)) return { kind: "mark", names: ["Fixed"] };
   let m = t.match(/^mark(?: as)? (.+)$/i);
   if (m) return { kind: "mark", names: names(m[1]) };
   if (/^(unmark|clear)( all)?$/i.test(t)) return { kind: "unmarkAll" };

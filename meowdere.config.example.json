@@ -2,6 +2,7 @@
   "ownerId": "YOUR_DISCORD_USER_ID",
   "changelogChannelId": "CHANGELOG_TEXT_CHANNEL_ID",
   "watchForumIds": ["BUG_REPORTS_FORUM_ID"],
+  "ownerPingTimeoutSeconds": 60,
   "pollSeconds": 60,
   "repos": [
     { "repo": "owner/name", "branch": "main", "deployWorkflow": "deploy.yml" }

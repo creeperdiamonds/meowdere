@@ -23,6 +23,8 @@ export interface Config {
   watchForumIds: string[];
   repos: RepoConfig[];
   pollSeconds: number;
+  /** How long someone who pings the owner is timed out. 0 turns it off. */
+  ownerPingTimeoutSeconds: number;
   stateFile: string;
 }
 
@@ -32,6 +34,7 @@ interface FileConfig {
   watchForumIds?: unknown;
   repos?: unknown;
   pollSeconds?: unknown;
+  ownerPingTimeoutSeconds?: unknown;
 }
 
 const snowflake = (v: unknown, name: string): string => {
@@ -67,6 +70,8 @@ export function parseConfig(file: FileConfig, env: NodeJS.ProcessEnv): Config {
     watchForumIds: forums.map((f, i) => snowflake(f, `watchForumIds[${i}]`)),
     repos: file.repos.map(parseRepo),
     pollSeconds: Math.max(30, Number(file.pollSeconds) || 60),
+    // Short on purpose: a nudge, not a punishment. Capped at 10 minutes.
+    ownerPingTimeoutSeconds: file.ownerPingTimeoutSeconds === undefined ? 60 : Math.min(600, Math.max(0, Number(file.ownerPingTimeoutSeconds) || 0)),
     stateFile: env.STATE_FILE?.trim() || "state.json",
   };
 }

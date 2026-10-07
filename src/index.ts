@@ -21,7 +21,7 @@ import {
   type TextChannel,
 } from "discord.js";
 import { loadConfig, type RepoConfig } from "./config.ts";
-import { GitHub, newSince, type Run } from "./github.ts";
+import { GitHub, newSince, type Commit, type Run } from "./github.ts";
 import { releasedBody, shipped, unreleasedBody } from "./changelog.ts";
 import { matchTag, parseCommand, type Tag } from "./commands.ts";
 import { loadState, repoState, saveState, type RepoState } from "./state.ts";
@@ -104,10 +104,38 @@ async function reportRun(rc: RepoConfig, st: RepoState, run: Run) {
   log(`${rc.repo}: deploy #${run.number} shipped ${done.length} commit(s)`);
 
   if (done.length) {
+    await markFixed(done);
     st.pending = left;
     st.unreleasedMessageId = null;
     // Commits pushed after what this run deployed get a fresh Unreleased message.
     if (left.length) await addToUnreleased(rc, st);
+  }
+}
+
+/**
+ * Shipped commits that said "fixes #<post ID>": tag those posts Fixed and
+ * tell whoever opened them. Only posts in the watched forums, so a commit
+ * message can't make her post anywhere else.
+ */
+async function markFixed(commits: Commit[]) {
+  for (const commit of commits) {
+    for (const postId of commit.fixes ?? []) {
+      try {
+        const thread = await client.channels.fetch(postId);
+        if (!thread?.isThread() || !thread.parentId || !config.watchForumIds.includes(thread.parentId)) continue;
+        if (thread.parent?.type !== ChannelType.GuildForum) continue;
+        if (thread.archived) await thread.setArchived(false);
+        const fixed = matchTag("Fixed", thread.parent.availableTags.map((t) => ({ id: t.id, name: t.name })));
+        if ("tag" in fixed && !thread.appliedTags.includes(fixed.tag.id) && thread.appliedTags.length < 5) {
+          await thread.setAppliedTags([...thread.appliedTags, fixed.tag.id]);
+        }
+        const reporter = thread.ownerId ?? null;
+        await thread.send({ content: voice.fixShipped(reporter, commit.sha, commit.url), allowedMentions: { parse: [], users: reporter ? [reporter] : [] } });
+        log(`Marked post ${postId} fixed by ${commit.sha.slice(0, 7)}`);
+      } catch (err) {
+        log(`Couldn't mark post ${postId} fixed:`, String(err));
+      }
+    }
   }
 }
 
@@ -173,7 +201,7 @@ client.on(Events.ThreadCreate, async (thread, newlyCreated) => {
   // A brand-new forum post can refuse messages until its first one lands.
   await new Promise((r) => setTimeout(r, 1500));
   try {
-    await thread.send({ content: voice.newPost(config.ownerId), allowedMentions: pingOwner });
+    await thread.send({ content: voice.newPost(config.ownerId, thread.id), allowedMentions: pingOwner });
   } catch (err) {
     log("Couldn't ping in new post", thread.id, String(err));
   }
@@ -184,6 +212,7 @@ client.on(Events.ThreadCreate, async (thread, newlyCreated) => {
 client.on(Events.MessageCreate, async (msg) => {
   const me = client.user;
   if (!me || msg.author.bot || !msg.inGuild()) return;
+  await onOwnerPing(msg).catch((err) => log("Owner-ping check failed:", String(err)));
   // A real @mention in the text, not a reply that happens to ping her.
   const mention = new RegExp(`<@!?${me.id}>`, "g");
   if (!mention.test(msg.content)) return;
@@ -193,6 +222,35 @@ client.on(Events.MessageCreate, async (msg) => {
     log("Command failed:", String(err));
   }
 });
+
+// ---- pinging the owner ----
+
+/**
+ * Someone pinged the owner: a short timeout, no ladder, and the message
+ * stays. She answers with the owner's name, which never pings them.
+ *
+ * Mentions come with every message even without the Message Content intent,
+ * so this needs no privileged intent. A reply to the owner's own message is
+ * left alone: Discord pings on reply by default, and that's not on purpose.
+ */
+async function onOwnerPing(msg: Message<true>) {
+  if (msg.author.id === config.ownerId || !msg.mentions.users.has(config.ownerId)) return;
+  if (msg.reference && msg.mentions.repliedUser?.id === config.ownerId) return;
+  // Moderators can ping freely.
+  if (msg.member?.permissions.has(PermissionFlagsBits.ModerateMembers)) return;
+
+  const seconds = config.ownerPingTimeoutSeconds;
+  let timedOut = false;
+  if (seconds > 0 && msg.member?.moderatable) {
+    try {
+      await msg.member.timeout(seconds * 1000, "Pinged the owner (Meowdere)");
+      timedOut = true;
+    } catch (err) {
+      log("Couldn't time out", msg.author.id, String(err));
+    }
+  }
+  await msg.reply({ content: voice.ownerBusy(config.ownerId, timedOut ? seconds : 0), allowedMentions: { parse: [], repliedUser: false } });
+}
 
 async function handleCommand(msg: Message<true>, text: string) {
   const reply = (content: string) => msg.reply({ content, allowedMentions: { ...pingNobody, repliedUser: false } });

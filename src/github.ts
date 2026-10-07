@@ -9,6 +9,14 @@ export interface Commit {
   title: string;
   author: string;
   url: string;
+  /** Forum post IDs the message says it fixes ("fixes #<post ID>"). */
+  fixes: string[];
+}
+
+/** "fixes #123…", "closes #123…", "resolved #123…": Discord post IDs only, not GitHub issue numbers. */
+export function fixesIn(message: string): string[] {
+  const ids = [...message.matchAll(/\b(?:fix(?:e[sd])?|close[sd]?|resolve[sd]?)\s*:?\s+#(\d{17,20})\b/gi)].map((m) => m[1]);
+  return [...new Set(ids)];
 }
 
 export interface Run {
@@ -49,6 +57,7 @@ export class GitHub {
       title: c.commit.message.split("\n")[0],
       author: c.author?.login ?? c.commit.author?.name ?? "unknown",
       url: c.html_url,
+      fixes: fixesIn(c.commit.message),
     }));
   }
 
