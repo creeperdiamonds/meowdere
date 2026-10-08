@@ -23,7 +23,7 @@ import {
 import { loadConfig, type RepoConfig } from "./config.ts";
 import { GitHub, newSince, type Commit, type Run } from "./github.ts";
 import { releasedBody, shipped, unreleasedBody } from "./changelog.ts";
-import { matchTag, parseCommand, type Tag } from "./commands.ts";
+import { matchTag, parseCommands, planTags, type Tag } from "./commands.ts";
 import { loadState, repoState, saveState, type RepoState } from "./state.ts";
 import { voice } from "./voice.ts";
 
@@ -256,63 +256,49 @@ async function onOwnerPing(msg: Message<true>) {
 
 async function handleCommand(msg: Message<true>, text: string) {
   const reply = (content: string) => msg.reply({ content, allowedMentions: { ...pingNobody, repliedUser: false } });
-  const cmd = parseCommand(text);
-  if (cmd.kind === "help") return reply(voice.help());
+  const cmds = parseCommands(text);
+  if (cmds.length === 0 || cmds.some((c) => c.kind === "help")) return reply(voice.help());
 
   const thread = msg.channel;
   if (!thread.isThread() || thread.parent?.type !== ChannelType.GuildForum) return reply(voice.notForum());
   const forum = thread.parent;
   const tags: Tag[] = forum.availableTags.map((t) => ({ id: t.id, name: t.name }));
-  if (cmd.kind === "tags") return reply(voice.tags(tags.map((t) => t.name)));
+  if (cmds.every((c) => c.kind === "tags")) return reply(voice.tags(tags.map((t) => t.name)));
 
   const allowed = msg.author.id === config.ownerId || msg.member?.permissionsIn(thread).has(PermissionFlagsBits.ManageThreads);
   if (!allowed) return reply(voice.notAllowed());
 
-  const current = thread.appliedTags;
-  const setTags = async (ids: string[]) => {
+  // Every action is worked out first and applied in one edit, so a message
+  // like "mark as bug and unmark as new" is all or nothing.
+  const plan = planTags(thread.appliedTags, cmds, tags);
+  if ("error" in plan) return reply(plan.error);
+  if (plan.next.length > 5) return reply(voice.tooManyTags());
+
+  const changed = plan.added.length > 0 || plan.removed.length > 0;
+  if (!changed && !plan.lock) {
+    // Nothing to do: say why, in the words of the one action if there was one.
+    const only = cmds.length === 1 ? cmds[0] : null;
+    if (only?.kind === "mark") return reply(voice.alreadyMarked(only.names));
+    if (only?.kind === "unmark") return reply(voice.notMarked(only.names));
+    return reply(voice.nothingChanged());
+  }
+  if (changed) {
     try {
-      await thread.setAppliedTags(ids);
-      return true;
+      await thread.setAppliedTags(plan.next);
     } catch {
-      await reply(voice.cantEdit());
-      return false;
+      return reply(voice.cantEdit());
     }
-  };
-
-  if (cmd.kind === "unmarkAll") {
-    if (await setTags([])) await reply(voice.unmarkedAll());
-    return;
   }
 
-  const chosen: Tag[] = [];
-  for (const name of cmd.names) {
-    const found = matchTag(name, tags);
-    if ("error" in found) return reply(found.error);
-    chosen.push(found.tag);
-  }
-  const names = chosen.map((t) => t.name);
-
-  if (cmd.kind === "mark" && cmd.lock) {
-    // "@Meowdere fixed" / "completed": tag it (unless it already is), say so, then lock.
-    // She replies before locking so her message lands in an open post.
-    const add = chosen.filter((t) => !current.includes(t.id)).map((t) => t.id);
-    if (add.length && current.length + add.length > 5) return reply(voice.tooManyTags());
-    if (add.length && !(await setTags([...current, ...add]))) return;
-    await reply(voice.closedLocked(chosen[0].name));
+  // She replies before locking so her message lands in an open post.
+  const clearedAll = cmds.length === 1 && cmds[0].kind === "unmarkAll";
+  await reply(voice.changed(plan.added.map((t) => t.name), plan.removed.map((t) => t.name), plan.lock?.name ?? null, clearedAll));
+  if (plan.lock) {
     try {
-      await thread.setLocked(true, `Marked ${chosen[0].name} by ${msg.author.tag}`);
+      await thread.setLocked(true, `Marked ${plan.lock.name} by ${msg.author.tag}`);
     } catch {
       await reply(voice.cantEdit());
     }
-  } else if (cmd.kind === "mark") {
-    const add = chosen.filter((t) => !current.includes(t.id)).map((t) => t.id);
-    if (add.length === 0) return reply(voice.alreadyMarked(names));
-    if (current.length + add.length > 5) return reply(voice.tooManyTags());
-    if (await setTags([...current, ...add])) await reply(voice.marked(names));
-  } else {
-    const drop = new Set(chosen.map((t) => t.id));
-    if (!current.some((id) => drop.has(id))) return reply(voice.notMarked(names));
-    if (await setTags(current.filter((id) => !drop.has(id)))) await reply(voice.unmarked(names));
   }
 }
 

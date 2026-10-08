@@ -51,6 +51,21 @@ export const voice = {
   unmarkedAll: () => "All tags off, squeaky clean, nya~",
   alreadyMarked: (tags: string[]) => `It's already marked as ${list(tags)}, silly.`,
   notMarked: (tags: string[]) => `It wasn't marked as ${list(tags)} to begin with, nya~`,
+  nothingChanged: () => "That all cancels out, so nothing changed, nya~",
+  /** What a tag command did, in one reply. Single actions keep their own lines. */
+  changed(added: string[], removed: string[], locked: string | null, clearedAll: boolean): string {
+    if (locked && removed.length === 0 && added.every((t) => t === locked)) return voice.closedLocked(locked);
+    if (!locked && clearedAll) return voice.unmarkedAll();
+    if (!locked && removed.length === 0) return voice.marked(added);
+    if (!locked && added.length === 0) return voice.unmarked(removed);
+    const parts = [
+      added.length ? `marked as ${list(added)}` : null,
+      removed.length ? `took off ${list(removed)}` : null,
+      locked ? "locked it" : null,
+    ].filter(Boolean) as string[];
+    const said = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}` : parts[0];
+    return `${said[0].toUpperCase()}${said.slice(1)}${locked ? ". All done here" : ""}, nya~`;
+  },
   tooManyTags: () => "A post can only wear 5 tags at once! Take one off first?",
   tags: (names: string[]) => (names.length ? `This forum's tags: ${list(names)}` : "This forum doesn't have any tags yet, nya~"),
   notForum: () => "I can only tag posts inside a forum, nya~",
@@ -65,6 +80,7 @@ export const voice = {
       "`@Meowdere unmark <tag>`: I'll take it off",
       "`@Meowdere unmark`: I'll take every tag off",
       "`@Meowdere tags`: I'll list this forum's tags",
+      "Do several at once with *and*: `mark as bug and unmark as new`",
     ].join("\n"),
 };
 

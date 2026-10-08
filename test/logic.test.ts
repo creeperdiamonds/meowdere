@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { parseConfig } from "../src/config.ts";
 import { fixesIn, newSince, type Commit } from "../src/github.ts";
 import { commitList, releasedBody, shipped, unreleasedBody } from "../src/changelog.ts";
-import { matchTag, parseCommand } from "../src/commands.ts";
+import { matchTag, parseCommand, parseCommands, planTags } from "../src/commands.ts";
 import { pick, voice } from "../src/voice.ts";
 
 const c = (sha: string, title = `Commit ${sha}`): Commit => ({ sha, title, author: "creeperdiamonds", url: `https://github.com/x/y/commit/${sha}`, fixes: [] });
@@ -102,4 +102,47 @@ test("owner pings: a short timeout by default, never a ping back", () => {
   assert.match(voice.ownerBusy("42", 60), /<@42> .*busy/s);
   assert.match(voice.ownerBusy("42", 60), /1-minute timeout/);
   assert.doesNotMatch(voice.ownerBusy("42", 0), /timeout/, "no timeout, no mention of one");
+});
+
+test("several actions in one message, split only before another action", () => {
+  assert.deepEqual(parseCommands("mark as bug and unmark as new"), [
+    { kind: "mark", names: ["bug"] },
+    { kind: "unmark", names: ["new"] },
+  ]);
+  assert.deepEqual(parseCommands("unmark question then fixed"), [
+    { kind: "unmark", names: ["question"] },
+    { kind: "mark", names: ["Fixed"], lock: true },
+  ]);
+  assert.deepEqual(parseCommands("mark as Q and A"), [{ kind: "mark", names: ["Q and A"] }], "a tag with 'and' in it stays whole");
+  assert.deepEqual(parseCommands("mark as a; unmark b"), [{ kind: "mark", names: ["a"] }, { kind: "unmark", names: ["b"] }]);
+});
+
+test("a plan applies every action in order and reports the net change", () => {
+  const tags = [{ id: "1", name: "Bug" }, { id: "2", name: "New" }, { id: "3", name: "Fixed" }, { id: "4", name: "Q and A" }];
+  const plan = (current: string[], text: string) => planTags(current, parseCommands(text), tags);
+
+  const swap = plan(["2"], "mark as bug and unmark as new");
+  assert.ok(!("error" in swap));
+  assert.deepEqual(swap.next, ["1"]);
+  assert.deepEqual(swap.added.map((t) => t.name), ["Bug"]);
+  assert.deepEqual(swap.removed.map((t) => t.name), ["New"]);
+  assert.equal(swap.lock, null);
+
+  const close = plan(["1", "2"], "unmark new and fixed");
+  assert.ok(!("error" in close));
+  assert.deepEqual(close.next, ["1", "3"]);
+  assert.equal(close.lock?.name, "Fixed");
+
+  const cancel = plan([], "mark as bug and unmark as bug");
+  assert.ok(!("error" in cancel));
+  assert.deepEqual([cancel.added, cancel.removed], [[], []]);
+
+  assert.ok("error" in plan([], "mark as bug and unmark as nope"), "one bad tag stops the whole message");
+});
+
+test("one reply sums up a multi-action message", () => {
+  assert.equal(voice.changed(["Bug"], ["New"], null, false), "Marked as **Bug** and took off **New**, nya~");
+  assert.equal(voice.changed(["Fixed"], ["New"], "Fixed", false), "Marked as **Fixed**, took off **New** and locked it. All done here, nya~");
+  assert.equal(voice.changed(["Fixed"], [], "Fixed", false), "Marked as **Fixed** and locked. All done here, nya~");
+  assert.equal(voice.changed(["Bug"], [], null, false), "Marked as **Bug**, nya~");
 });

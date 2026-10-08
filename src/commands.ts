@@ -27,6 +27,63 @@ export function parseCommand(text: string): Command {
   return { kind: "help" };
 }
 
+/**
+ * Several actions in one message: "mark as bug and unmark as new",
+ * "unmark question then fixed". Split only where "and", "then", ";" or a new
+ * line comes right before another action, so a tag called "Q and A" stays whole.
+ */
+export function parseCommands(text: string): Command[] {
+  const verb = String.raw`(?:mark|unmark|clear|fixed|completed?)\b`;
+  return text
+    .split(new RegExp(String.raw`\s*(?:;|\n|,?\s+(?:and|then)\s+)\s*(?=${verb})`, "i"))
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map(parseCommand);
+}
+
+export interface TagPlan {
+  /** The post's tags once every action is applied, in order. */
+  next: string[];
+  added: Tag[];
+  removed: Tag[];
+  /** The tag a closing action (fixed, completed) named, if the post should be locked. */
+  lock: Tag | null;
+}
+
+/**
+ * Applies the actions, left to right, to the post's current tags. The net
+ * change is what counts: "mark as a and unmark as a" changes nothing.
+ */
+export function planTags(current: string[], commands: Command[], tags: Tag[]): TagPlan | { error: string } {
+  let next = [...current];
+  let lock: Tag | null = null;
+  for (const cmd of commands) {
+    if (cmd.kind === "tags" || cmd.kind === "help") continue;
+    if (cmd.kind === "unmarkAll") {
+      next = [];
+      continue;
+    }
+    for (const name of cmd.names) {
+      const found = matchTag(name, tags);
+      if ("error" in found) return found;
+      const id = found.tag.id;
+      if (cmd.kind === "mark") {
+        if (!next.includes(id)) next.push(id);
+        if (cmd.lock) lock ??= found.tag;
+      } else {
+        next = next.filter((t) => t !== id);
+      }
+    }
+  }
+  const byId = (id: string) => tags.find((t) => t.id === id) ?? { id, name: id };
+  return {
+    next,
+    added: next.filter((id) => !current.includes(id)).map(byId),
+    removed: current.filter((id) => !next.includes(id)).map(byId),
+    lock,
+  };
+}
+
 export interface Tag {
   id: string;
   name: string;

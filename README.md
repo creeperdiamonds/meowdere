@@ -33,6 +33,7 @@ posts when you ask her to.
   - `@Meowdere mark as <tag>` (several at once: `mark as bug, urgent`)
   - `@Meowdere unmark <tag>`, or `@Meowdere unmark` to remove them all
   - `@Meowdere tags` to list the forum's tags
+  - Several at once with *and*, *then* or `;`: `@Meowdere mark as bug and unmark as new`, or `@Meowdere unmark question then fixed`. Everything is applied in one go, and nothing changes if one tag name is wrong.
 
   Only the owner and people with Manage Threads can change tags.
 
