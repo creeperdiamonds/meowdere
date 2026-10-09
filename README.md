@@ -17,6 +17,9 @@ posts when you ask her to.
   When the deploy workflow succeeds, that message becomes the release's
   changelog and she replies to it, pinging you. If a deploy fails she tells
   you, and the commits wait for the next one.
+  If the changelog channel is an **Announcement** channel, she publishes each
+  release, so every server following it gets the changelog too. Drafts,
+  failed deploys and pings stay in your server.
 - **New posts.** Every new post in the forums you list (a bug-reports forum,
   say) pings you.
 - **Fixed, from a commit.** Put `fixes #<post ID>` in a commit message (her

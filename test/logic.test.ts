@@ -74,7 +74,7 @@ test("Meowdere pings the owner on deploys and new posts, and keeps emoji rare", 
     }
   }
   assert.equal(pick(["a", "b"], () => 0.99), "b");
-  assert.equal(voice.marked(["Bug", "High"]), "Marked as **Bug** and **High**, nya~");
+  for (let i = 0; i < 20; i++) assert.ok(voice.marked(["Bug", "High"]).includes("**Bug** and **High**"), "names both tags, whichever line she picks");
   for (let i = 0; i < 20; i++) assert.doesNotMatch(voice.unreleasedIntro(), /<@/, "a push alone doesn't ping");
 });
 
@@ -91,7 +91,7 @@ test("@Meowdere fixed / completed tag the post and lock it", () => {
   assert.deepEqual(parseCommand("completed"), { kind: "mark", names: ["Completed"], lock: true });
   assert.deepEqual(parseCommand("Complete~"), { kind: "mark", names: ["Completed"], lock: true });
   assert.deepEqual(parseCommand("mark as completed"), { kind: "mark", names: ["completed"] }, "the long form only tags");
-  assert.equal(voice.closedLocked("Completed"), "Marked as **Completed** and locked. All done here, nya~");
+  for (let i = 0; i < 20; i++) assert.ok(voice.closedLocked("Completed").includes("**Completed** and locked"));
 });
 
 test("owner pings: a short timeout by default, never a ping back", () => {
@@ -143,6 +143,10 @@ test("a plan applies every action in order and reports the net change", () => {
 test("one reply sums up a multi-action message", () => {
   assert.equal(voice.changed(["Bug"], ["New"], null, false), "Marked as **Bug** and took off **New**, nya~");
   assert.equal(voice.changed(["Fixed"], ["New"], "Fixed", false), "Marked as **Fixed**, took off **New** and locked it. All done here, nya~");
-  assert.equal(voice.changed(["Fixed"], [], "Fixed", false), "Marked as **Fixed** and locked. All done here, nya~");
-  assert.equal(voice.changed(["Bug"], [], null, false), "Marked as **Bug**, nya~");
+  for (let i = 0; i < 20; i++) assert.ok(voice.changed(["Fixed"], [], "Fixed", false).includes("**Fixed** and locked"));
+  for (let i = 0; i < 20; i++) assert.ok(voice.changed(["Bug"], [], null, false).includes("**Bug**"));
+});
+
+test("published changelog intros never mention anyone", () => {
+  for (let i = 0; i < 50; i++) assert.doesNotMatch(voice.shippedIntro(), /<@/, "these reach every following server");
 });

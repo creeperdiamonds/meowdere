@@ -75,6 +75,21 @@ async function addToUnreleased(rc: RepoConfig, st: RepoState) {
   log(`${rc.repo}: started an Unreleased message`);
 }
 
+/**
+ * In an announcement channel, sends a released changelog on to every server
+ * following it (Appealy's dashboard sets those follows up). Only releases:
+ * the Unreleased draft, failed deploys and pings stay in this server. A
+ * plain text channel has nothing to publish to, and that's fine.
+ */
+async function publish(message: Message) {
+  if (!message.crosspostable) return;
+  try {
+    await message.crosspost();
+  } catch (err) {
+    log("Couldn't publish the changelog to followers:", String(err));
+  }
+}
+
 async function reportRun(rc: RepoConfig, st: RepoState, run: Run) {
   const failed = run.conclusion === "failure" || run.conclusion === "timed_out";
   if (run.conclusion !== "success" && !failed) return; // cancelled or skipped: nothing to say
@@ -90,14 +105,15 @@ async function reportRun(rc: RepoConfig, st: RepoState, run: Run) {
   }
 
   const { shipped: done, left } = shipped(st.pending, run.headSha);
-  if (done.length && existing) {
-    await existing.edit({ content: releasedBody(voice.shippedIntro(), rc.repo, done, run.number, run.url, new Date()), allowedMentions: pingNobody });
-    await existing.reply({ content: voice.deployed(config.ownerId), allowedMentions: pingOwner });
-  } else if (done.length) {
-    await channel.send({
-      content: `${voice.deployed(config.ownerId)}\n${releasedBody(voice.shippedIntro(), rc.repo, done, run.number, run.url, new Date())}`,
-      allowedMentions: pingOwner,
-    });
+  if (done.length) {
+    // The changelog itself, then the ping as a reply, so the published
+    // message carries no mention of the owner into other servers.
+    const body = releasedBody(voice.shippedIntro(), rc.repo, done, run.number, run.url, new Date());
+    const release = existing
+      ? await existing.edit({ content: body, allowedMentions: pingNobody })
+      : await channel.send({ content: body, allowedMentions: pingNobody });
+    await publish(release);
+    await release.reply({ content: voice.deployed(config.ownerId), allowedMentions: pingOwner });
   } else {
     await channel.send({ content: voice.redeployed(config.ownerId), allowedMentions: pingOwner });
   }
