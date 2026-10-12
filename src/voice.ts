@@ -84,19 +84,25 @@ export const voice = {
   notMarked: (tags: string[]) => `It wasn't marked as ${list(tags)} to begin with, nya~`,
   nothingChanged: () => "That all cancels out, so nothing changed, nya~",
   /** What a tag command did, in one reply. Single actions keep their own lines. */
-  changed(added: string[], removed: string[], locked: string | null, clearedAll: boolean): string {
-    if (locked && removed.length === 0 && added.every((t) => t === locked)) return voice.closedLocked(locked);
-    if (!locked && clearedAll) return voice.unmarkedAll();
-    if (!locked && removed.length === 0) return voice.marked(added);
-    if (!locked && added.length === 0) return voice.unmarked(removed);
+  changed(added: string[], removed: string[], closedAs: string | null, locking: boolean | null, clearedAll: boolean): string {
+    const tagsOnly = locking === null;
+    if (closedAs && locking && removed.length === 0 && added.every((t) => t === closedAs)) return voice.closedLocked(closedAs);
+    if (added.length === 0 && removed.length === 0) return locking ? voice.lockedOnly() : voice.unlockedOnly();
+    if (tagsOnly && clearedAll) return voice.unmarkedAll();
+    if (tagsOnly && removed.length === 0) return voice.marked(added);
+    if (tagsOnly && added.length === 0) return voice.unmarked(removed);
     const parts = [
       added.length ? `marked as ${list(added)}` : null,
       removed.length ? `took off ${list(removed)}` : null,
-      locked ? "locked it" : null,
+      locking === true ? "locked it" : locking === false ? "unlocked it" : null,
     ].filter(Boolean) as string[];
     const said = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}` : parts[0];
-    return `${said[0].toUpperCase()}${said.slice(1)}${locked ? ". All done here" : ""}, nya~`;
+    return `${said[0].toUpperCase()}${said.slice(1)}${locking ? ". All done here" : ""}, nya~`;
   },
+  lockedOnly: () => pick(["Locked~ nobody can reply here now, nya~", "All locked up, safe and sound ♡"]),
+  unlockedOnly: () => pick(["Unlocked~ everyone can reply again, nya~", "It's open again! Come on in ♡"]),
+  alreadyLocked: () => "It's already locked, silly~",
+  notLocked: () => "It isn't locked to begin with, nya~",
   tooManyTags: () => "A post can only wear 5 tags at once! Take one off first? ♡",
   tags: (names: string[]) => (names.length ? `This forum's tags: ${list(names)}` : "This forum doesn't have any tags yet, nya~"),
   notForum: () => "I can only tag posts inside a forum, nya~",
@@ -110,8 +116,9 @@ export const voice = {
       "`@Meowdere mark as <tag>`: I'll add it (several: `mark as bug, urgent`)",
       "`@Meowdere unmark <tag>`: I'll take it off",
       "`@Meowdere unmark`: I'll take every tag off",
+      "`@Meowdere lock` / `unlock`: I'll lock the post, or open it again",
       "`@Meowdere tags`: I'll list this forum's tags",
-      "Do several at once with *and*: `mark as bug and unmark as new`",
+      "Do several at once with *and*: `mark as Won't Fix and lock`",
     ].join("\n"),
 };
 

@@ -33,6 +33,7 @@ posts when you ask her to.
 - **Tags.** In any forum post:
   - `@Meowdere fixed` to tag it **Fixed** and lock it
   - `@Meowdere completed` to tag it **Completed** and lock it
+  - `@Meowdere lock` / `@Meowdere unlock` to lock a post or open it again, also chained: `mark as Won't Fix and lock`
   - `@Meowdere mark as <tag>` (several at once: `mark as bug, urgent`)
   - `@Meowdere unmark <tag>`, or `@Meowdere unmark` to remove them all
   - `@Meowdere tags` to list the forum's tags

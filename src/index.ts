@@ -291,11 +291,17 @@ async function handleCommand(msg: Message<true>, text: string) {
   if (plan.next.length > 5) return reply(voice.tooManyTags());
 
   const changed = plan.added.length > 0 || plan.removed.length > 0;
-  if (!changed && !plan.lock) {
+  // A lock or unlock that wouldn't change anything isn't a change either.
+  const locking = plan.locked !== null && plan.locked !== thread.locked ? plan.locked : null;
+  if (!changed && locking === null) {
     // Nothing to do: say why, in the words of the one action if there was one.
     const only = cmds.length === 1 ? cmds[0] : null;
-    if (only?.kind === "mark") return reply(voice.alreadyMarked(only.names));
+    if (only?.kind === "mark" && !plan.lock) return reply(voice.alreadyMarked(only.names));
     if (only?.kind === "unmark") return reply(voice.notMarked(only.names));
+    if (plan.locked !== null && cmds.every((c) => c.kind === "lock" || c.kind === "unlock" || c.kind === "tags")) {
+      return reply(plan.locked ? voice.alreadyLocked() : voice.notLocked());
+    }
+    if (plan.lock) return reply(voice.closedLocked(plan.lock.name));
     return reply(voice.nothingChanged());
   }
   if (changed) {
@@ -306,12 +312,21 @@ async function handleCommand(msg: Message<true>, text: string) {
     }
   }
 
-  // She replies before locking so her message lands in an open post.
-  const clearedAll = cmds.length === 1 && cmds[0].kind === "unmarkAll";
-  await reply(voice.changed(plan.added.map((t) => t.name), plan.removed.map((t) => t.name), plan.lock?.name ?? null, clearedAll));
-  if (plan.lock) {
+  // Unlocked before her reply and locked after it, so the reply always lands
+  // in an open post.
+  const why = `${locking ? "Locked" : "Unlocked"} by ${msg.author.tag}${plan.lock ? ` (${plan.lock.name})` : ""}`;
+  if (locking === false) {
     try {
-      await thread.setLocked(true, `Marked ${plan.lock.name} by ${msg.author.tag}`);
+      await thread.setLocked(false, why);
+    } catch {
+      return reply(voice.cantEdit());
+    }
+  }
+  const clearedAll = cmds.length === 1 && cmds[0].kind === "unmarkAll";
+  await reply(voice.changed(plan.added.map((t) => t.name), plan.removed.map((t) => t.name), plan.lock?.name ?? null, locking, clearedAll));
+  if (locking) {
+    try {
+      await thread.setLocked(true, why);
     } catch {
       await reply(voice.cantEdit());
     }

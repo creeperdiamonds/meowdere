@@ -141,10 +141,43 @@ test("a plan applies every action in order and reports the net change", () => {
 });
 
 test("one reply sums up a multi-action message", () => {
-  assert.equal(voice.changed(["Bug"], ["New"], null, false), "Marked as **Bug** and took off **New**, nya~");
-  assert.equal(voice.changed(["Fixed"], ["New"], "Fixed", false), "Marked as **Fixed**, took off **New** and locked it. All done here, nya~");
-  for (let i = 0; i < 20; i++) assert.ok(voice.changed(["Fixed"], [], "Fixed", false).includes("**Fixed** and locked"));
-  for (let i = 0; i < 20; i++) assert.ok(voice.changed(["Bug"], [], null, false).includes("**Bug**"));
+  assert.equal(voice.changed(["Bug"], ["New"], null, null, false), "Marked as **Bug** and took off **New**, nya~");
+  assert.equal(voice.changed(["Fixed"], ["New"], "Fixed", true, false), "Marked as **Fixed**, took off **New** and locked it. All done here, nya~");
+  for (let i = 0; i < 20; i++) assert.ok(voice.changed(["Fixed"], [], "Fixed", true, false).includes("**Fixed** and locked"));
+  for (let i = 0; i < 20; i++) assert.ok(voice.changed(["Bug"], [], null, null, false).includes("**Bug**"));
+  assert.equal(voice.changed(["Won't Fix"], [], null, true, false), "Marked as **Won't Fix** and locked it. All done here, nya~");
+  assert.equal(voice.changed([], ["Fixed"], null, false, false), "Took off **Fixed** and unlocked it, nya~");
+  for (let i = 0; i < 20; i++) assert.match(voice.changed([], [], null, true, false), /lock/i);
+  for (let i = 0; i < 20; i++) assert.match(voice.changed([], [], null, false, false), /unlock|open/i);
+});
+
+test("lock and unlock, alone or chained with tags", () => {
+  assert.deepEqual(parseCommand("lock"), { kind: "lock" });
+  assert.deepEqual(parseCommand("Lock this post!"), { kind: "lock" });
+  assert.deepEqual(parseCommand("unlock it"), { kind: "unlock" });
+  assert.deepEqual(parseCommands("lock and mark as Won't Fix"), [
+    { kind: "lock" },
+    { kind: "mark", names: ["Won't Fix"] },
+  ]);
+  assert.deepEqual(parseCommands("mark as Won't Fix and lock"), [
+    { kind: "mark", names: ["Won't Fix"] },
+    { kind: "lock" },
+  ]);
+
+  const tags = [{ id: "1", name: "Won't Fix" }, { id: "2", name: "Fixed" }];
+  const plan = (text: string) => planTags([], parseCommands(text), tags);
+  const wontFix = plan("lock and mark as wont fix");
+  assert.ok(!("error" in wontFix));
+  assert.deepEqual([wontFix.next, wontFix.locked, wontFix.lock], [["1"], true, null]);
+  const lockOnly = plan("lock");
+  assert.ok(!("error" in lockOnly));
+  assert.deepEqual([lockOnly.next, lockOnly.locked], [[], true]);
+  const reopen = plan("fixed and unlock");
+  assert.ok(!("error" in reopen));
+  assert.equal(reopen.locked, false, "the last word wins");
+  const untouched = plan("mark as fixed");
+  assert.ok(!("error" in untouched));
+  assert.equal(untouched.locked, null);
 });
 
 test("published changelog intros never mention anyone", () => {

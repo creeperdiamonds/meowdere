@@ -7,6 +7,8 @@ export type Command =
   | { kind: "mark"; names: string[]; lock?: boolean }
   | { kind: "unmark"; names: string[] }
   | { kind: "unmarkAll" }
+  | { kind: "lock" }
+  | { kind: "unlock" }
   | { kind: "tags" }
   | { kind: "help" };
 
@@ -24,6 +26,9 @@ export function parseCommand(text: string): Command {
   m = t.match(/^unmark(?: as)? (.+)$/i);
   if (m) return { kind: "unmark", names: names(m[1]) };
   if (/^tags?$/i.test(t)) return { kind: "tags" };
+  // "lock", "lock it", "lock this post"; the same for unlock.
+  m = t.match(/^(un)?lock(?: it| (?:this|the) post)?[.!~]*$/i);
+  if (m) return { kind: m[1] ? "unlock" : "lock" };
   return { kind: "help" };
 }
 
@@ -33,7 +38,7 @@ export function parseCommand(text: string): Command {
  * line comes right before another action, so a tag called "Q and A" stays whole.
  */
 export function parseCommands(text: string): Command[] {
-  const verb = String.raw`(?:mark|unmark|clear|fixed|completed?)\b`;
+  const verb = String.raw`(?:mark|unmark|clear|fixed|completed?|lock|unlock)\b`;
   return text
     .split(new RegExp(String.raw`\s*(?:;|\n|,?\s+(?:and|then)\s+)\s*(?=${verb})`, "i"))
     .map((part) => part.trim())
@@ -46,8 +51,10 @@ export interface TagPlan {
   next: string[];
   added: Tag[];
   removed: Tag[];
-  /** The tag a closing action (fixed, completed) named, if the post should be locked. */
+  /** The tag a closing action (fixed, completed) named. */
   lock: Tag | null;
+  /** true to lock the post, false to unlock it, null to leave it. The last word wins. */
+  locked: boolean | null;
 }
 
 /**
@@ -57,8 +64,13 @@ export interface TagPlan {
 export function planTags(current: string[], commands: Command[], tags: Tag[]): TagPlan | { error: string } {
   let next = [...current];
   let lock: Tag | null = null;
+  let locked: boolean | null = null;
   for (const cmd of commands) {
     if (cmd.kind === "tags" || cmd.kind === "help") continue;
+    if (cmd.kind === "lock" || cmd.kind === "unlock") {
+      locked = cmd.kind === "lock";
+      continue;
+    }
     if (cmd.kind === "unmarkAll") {
       next = [];
       continue;
@@ -69,7 +81,10 @@ export function planTags(current: string[], commands: Command[], tags: Tag[]): T
       const id = found.tag.id;
       if (cmd.kind === "mark") {
         if (!next.includes(id)) next.push(id);
-        if (cmd.lock) lock ??= found.tag;
+        if (cmd.lock) {
+          lock ??= found.tag;
+          locked = true;
+        }
       } else {
         next = next.filter((t) => t !== id);
       }
@@ -81,6 +96,7 @@ export function planTags(current: string[], commands: Command[], tags: Tag[]): T
     added: next.filter((id) => !current.includes(id)).map(byId),
     removed: current.filter((id) => !next.includes(id)).map(byId),
     lock,
+    locked,
   };
 }
 
