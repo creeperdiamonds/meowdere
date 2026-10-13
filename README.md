@@ -20,6 +20,11 @@ posts when you ask her to.
   If the changelog channel is an **Announcement** channel, she publishes each
   release, so every server following it gets the changelog too. Drafts,
   failed deploys and pings stay in your server.
+- **Weekly digest.** With `digest` set, releases stay in your server and
+  following servers get one message a week instead: everything shipped since
+  the last one, as plain lines (no hashes or authors). Commits titled `ci`,
+  `test`, `chore`, `docs`, `refactor`, `deps`, `build`, `style` or `merge` are
+  left out, and a week with nothing else posts nothing.
 - **New posts.** Every new post in the forums you list (a bug-reports forum,
   say) pings you.
 - **Fixed, from a commit.** Put `fixes #<post ID>` in a commit message (her
@@ -68,6 +73,7 @@ You need Node 23.6 or newer. She runs TypeScript directly, with no build step.
    | `repos` | Each repo, its `branch` (default `main`) and its `deployWorkflow` file. Leave the workflow out to track commits only. |
    | `ownerPingTimeoutSeconds` | How long pinging you times someone out (default 60, max 600, 0 turns it off) |
    | `pollSeconds` | How often to check GitHub (default 60, minimum 30) |
+   | `digest` | Optional. `{ "day": "monday", "hourUtc": 16 }` publishes one weekly digest at that time instead of every release |
 
    To copy IDs, turn on Developer Mode in Discord, then right-click → Copy ID.
 5. `npm install`, then `npm start`.

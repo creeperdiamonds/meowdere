@@ -45,6 +45,44 @@ export function releasedHeading(repo: string, when: Date): string {
   return `${repo.split("/")[1] ?? repo} · ${date}`;
 }
 
+/** Commits that change nothing a server would notice: CI, tests, docs and the like. */
+export function isInternal(title: string): boolean {
+  return /^(ci|tests?|chore|docs?|refactor|deps|build|style|merge)\b/i.test(title.trim());
+}
+
+/**
+ * The weekly digest, published to every following server: what shipped since
+ * the last one, in plain lines. No shas or authors, which mean nothing to a
+ * server admin reading it in their own channel.
+ */
+export function digestBody(intro: string, product: string, commits: Commit[], from: Date, to: Date, limit = BODY_LIMIT): string {
+  const fmt = (d: Date, year: boolean) =>
+    d.toLocaleDateString("en-GB", { day: "numeric", month: "short", ...(year ? { year: "numeric" } : {}), timeZone: "UTC" });
+  const lines: string[] = [];
+  let used = 0;
+  const shown = commits.filter((c) => !isInternal(c.title));
+  for (const c of shown) {
+    const line = `- ${c.title.length > 140 ? `${c.title.slice(0, 139)}…` : c.title}`;
+    if (used + line.length + 1 > limit - 40) break;
+    lines.push(line);
+    used += line.length + 1;
+  }
+  const rest = shown.length - lines.length;
+  if (rest > 0) lines.push(`…and ${rest} more.`);
+  return `## ${product} this week · ${fmt(from, false)} – ${fmt(to, true)}\n${intro}\n\n${lines.join("\n")}`;
+}
+
+/**
+ * The digest's slot is a weekday and hour (UTC). It's due once the most
+ * recent slot is later than the last digest.
+ */
+export function digestDue(now: Date, lastPostedAt: Date, weekday: number, hourUtc: number): boolean {
+  const slot = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hourUtc));
+  slot.setUTCDate(slot.getUTCDate() - ((slot.getUTCDay() - weekday + 7) % 7));
+  if (slot > now) slot.setUTCDate(slot.getUTCDate() - 7);
+  return slot > lastPostedAt;
+}
+
 /**
  * Which pending commits a deploy of `headSha` shipped: everything up to and
  * including that commit. A sha we never saw (deployed before we started

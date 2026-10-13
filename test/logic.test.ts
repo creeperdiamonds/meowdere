@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseConfig } from "../src/config.ts";
 import { fixesIn, newSince, type Commit } from "../src/github.ts";
-import { commitList, releasedBody, shipped, unreleasedBody } from "../src/changelog.ts";
+import { commitList, digestBody, digestDue, isInternal, releasedBody, shipped, unreleasedBody } from "../src/changelog.ts";
 import { matchTag, parseCommand, parseCommands, planTags } from "../src/commands.ts";
 import { pick, voice } from "../src/voice.ts";
 
@@ -181,5 +181,37 @@ test("lock and unlock, alone or chained with tags", () => {
 });
 
 test("published changelog intros never mention anyone", () => {
-  for (let i = 0; i < 50; i++) assert.doesNotMatch(voice.shippedIntro(), /<@/, "these reach every following server");
+  for (let i = 0; i < 50; i++) {
+    assert.doesNotMatch(voice.shippedIntro(), /<@/, "these reach every following server");
+    assert.doesNotMatch(voice.digestIntro(), /<@/, "so does the digest");
+  }
+});
+
+test("weekly digest: due once per slot, plain lines, internal commits left out", () => {
+  // Monday 16:00 UTC slots. 13 Oct 2026 is a Tuesday.
+  const mon = 1;
+  const at = (s: string) => new Date(s);
+  assert.equal(digestDue(at("2026-10-13T12:00Z"), at("2026-10-12T17:00Z"), mon, 16), false); // after Monday's slot
+  assert.equal(digestDue(at("2026-10-19T15:59Z"), at("2026-10-12T17:00Z"), mon, 16), false); // just before the next
+  assert.equal(digestDue(at("2026-10-19T16:00Z"), at("2026-10-12T17:00Z"), mon, 16), true);
+  assert.equal(digestDue(at("2026-10-19T16:05Z"), at("2026-10-19T16:01Z"), mon, 16), false); // already posted
+  assert.equal(digestDue(at("2026-10-26T09:00Z"), at("2026-10-12T17:00Z"), mon, 16), true); // missed a week: still goes out
+
+  assert.ok(isInternal("CI: cache deno"));
+  assert.ok(isInternal("tests for the ban gate"));
+  assert.ok(!isInternal("Testimonials on the home page"));
+  assert.ok(!isInternal("Move the updates-channel deadline to 31 October (#32)"));
+
+  const body = digestBody("Hi~", "Appealy", [c("aaaaaaa", "Vote perks"), c("bbbbbbb", "ci: fix cache"), c("ccccccc", "Lock command")], at("2026-10-12T16:00Z"), at("2026-10-19T16:00Z"));
+  assert.match(body, /^## Appealy this week · 12 Oct – 19 Oct 2026\nHi~\n\n- Vote perks\n- Lock command$/);
+  assert.doesNotMatch(body, /aaaaaaa|creeperdiamonds|ci: fix/);
+});
+
+test("config: digest is optional, and checked when given", () => {
+  const base = { ownerId: id, changelogChannelId: id, repos: [{ repo: "a/b" }] };
+  assert.equal(parseConfig(base, env).digest, null);
+  assert.deepEqual(parseConfig({ ...base, digest: { day: "Monday" } }, env).digest, { weekday: 1, hourUtc: 16 });
+  assert.deepEqual(parseConfig({ ...base, digest: { day: "friday", hourUtc: 9 } }, env).digest, { weekday: 5, hourUtc: 9 });
+  assert.throws(() => parseConfig({ ...base, digest: { day: "someday" } }, env), /digest.day/);
+  assert.throws(() => parseConfig({ ...base, digest: { day: "monday", hourUtc: 25 } }, env), /hourUtc/);
 });

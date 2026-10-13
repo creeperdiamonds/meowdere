@@ -22,9 +22,9 @@ import {
 } from "discord.js";
 import { loadConfig, type RepoConfig } from "./config.ts";
 import { GitHub, newSince, type Commit, type Run } from "./github.ts";
-import { releasedBody, shipped, unreleasedBody } from "./changelog.ts";
+import { digestBody, digestDue, isInternal, releasedBody, shipped, unreleasedBody } from "./changelog.ts";
 import { matchTag, parseCommands, planTags, type Tag } from "./commands.ts";
-import { loadState, repoState, saveState, type RepoState } from "./state.ts";
+import { digestState, loadState, repoState, saveState, type RepoState } from "./state.ts";
 import { voice } from "./voice.ts";
 
 if (existsSync(".env")) process.loadEnvFile(".env");
@@ -76,10 +76,11 @@ async function addToUnreleased(rc: RepoConfig, st: RepoState) {
 }
 
 /**
- * In an announcement channel, sends a released changelog on to every server
- * following it (Appealy's dashboard sets those follows up). Only releases:
- * the Unreleased draft, failed deploys and pings stay in this server. A
- * plain text channel has nothing to publish to, and that's fine.
+ * In an announcement channel, sends a message on to every server following it
+ * (Appealy's dashboard sets those follows up): each release, or with a digest
+ * configured only the weekly digest. The Unreleased draft, failed deploys and
+ * pings stay in this server. A plain text channel has nothing to publish to,
+ * and that's fine.
  */
 async function publish(message: Message) {
   if (!message.crosspostable) return;
@@ -112,7 +113,9 @@ async function reportRun(rc: RepoConfig, st: RepoState, run: Run) {
     const release = existing
       ? await existing.edit({ content: body, allowedMentions: pingNobody })
       : await channel.send({ content: body, allowedMentions: pingNobody });
-    await publish(release);
+    // With a digest, following servers hear about it in the weekly one instead.
+    if (config.digest) digestState(state).commits.push(...done);
+    else await publish(release);
     await release.reply({ content: voice.deployed(config.ownerId), allowedMentions: pingOwner });
   } else {
     await channel.send({ content: voice.redeployed(config.ownerId), allowedMentions: pingOwner });
@@ -194,6 +197,31 @@ async function pollRepo(rc: RepoConfig) {
   }
 }
 
+/**
+ * Once a week, everything shipped since the last digest, as one message
+ * published to the following servers. A quiet week (or one of only CI and
+ * test commits) posts nothing.
+ */
+async function postDigestIfDue() {
+  if (!config.digest) return;
+  const ds = digestState(state);
+  const now = new Date();
+  const last = new Date(ds.lastPostedAt);
+  if (!digestDue(now, last, config.digest.weekday, config.digest.hourUtc)) return;
+  const worth = ds.commits.filter((c) => !isInternal(c.title));
+  if (worth.length) {
+    const name = config.repos[0].repo.split("/")[1] ?? "";
+    const product = name.charAt(0).toUpperCase() + name.slice(1);
+    const channel = await changelogChannel();
+    const sent = await channel.send({ content: digestBody(voice.digestIntro(), product, ds.commits, last, now), allowedMentions: pingNobody });
+    await publish(sent);
+    log(`Posted the weekly digest: ${worth.length} change(s)`);
+  }
+  ds.commits = [];
+  ds.lastPostedAt = now.toISOString();
+  save();
+}
+
 let polling = false;
 async function pollAll() {
   if (polling) return;
@@ -205,6 +233,11 @@ async function pollAll() {
       } catch (err) {
         log(`${rc.repo}: check failed:`, String(err));
       }
+    }
+    try {
+      await postDigestIfDue();
+    } catch (err) {
+      log("Weekly digest failed:", String(err));
     }
   } finally {
     polling = false;
@@ -341,6 +374,11 @@ client.once(Events.ClientReady, async (c) => {
     await changelogChannel();
   } catch (err) {
     log(String(err));
+  }
+  if (config.digest) {
+    // Starts the clock the first time, so switching it on doesn't post at once.
+    digestState(state);
+    save();
   }
   await pollAll();
   setInterval(pollAll, config.pollSeconds * 1000);

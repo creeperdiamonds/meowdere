@@ -13,6 +13,14 @@ export interface RepoConfig {
   deployWorkflow: string | null;
 }
 
+/** When the weekly digest goes out: 0 = Sunday … 6 = Saturday, hour in UTC. */
+export interface DigestConfig {
+  weekday: number;
+  hourUtc: number;
+}
+
+const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+
 export interface Config {
   token: string;
   githubToken: string;
@@ -25,7 +33,22 @@ export interface Config {
   pollSeconds: number;
   /** How long someone who pings the owner is timed out. 0 turns it off. */
   ownerPingTimeoutSeconds: number;
+  /**
+   * Set: releases stay in this server and following servers get one digest a
+   * week instead. Null: every release is published as it ships.
+   */
+  digest: DigestConfig | null;
   stateFile: string;
+}
+
+function parseDigest(v: unknown): DigestConfig | null {
+  if (v === undefined || v === null || v === false) return null;
+  const d = v as Record<string, unknown>;
+  const weekday = WEEKDAYS.indexOf(String(d.day ?? "").toLowerCase());
+  if (weekday === -1) throw new Error(`digest.day must be a weekday name, like "monday"`);
+  const hourUtc = d.hourUtc === undefined ? 16 : Number(d.hourUtc);
+  if (!Number.isInteger(hourUtc) || hourUtc < 0 || hourUtc > 23) throw new Error("digest.hourUtc must be a whole hour from 0 to 23");
+  return { weekday, hourUtc };
 }
 
 interface FileConfig {
@@ -35,6 +58,7 @@ interface FileConfig {
   repos?: unknown;
   pollSeconds?: unknown;
   ownerPingTimeoutSeconds?: unknown;
+  digest?: unknown;
 }
 
 const snowflake = (v: unknown, name: string): string => {
@@ -72,6 +96,7 @@ export function parseConfig(file: FileConfig, env: NodeJS.ProcessEnv): Config {
     pollSeconds: Math.max(30, Number(file.pollSeconds) || 60),
     // Short on purpose: a nudge, not a punishment. Capped at 10 minutes.
     ownerPingTimeoutSeconds: file.ownerPingTimeoutSeconds === undefined ? 60 : Math.min(600, Math.max(0, Number(file.ownerPingTimeoutSeconds) || 0)),
+    digest: parseDigest(file.digest),
     stateFile: env.STATE_FILE?.trim() || "state.json",
   };
 }

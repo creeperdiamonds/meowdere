@@ -17,7 +17,20 @@ export interface RepoState {
   seenRuns: number[];
 }
 
+/** Shipped commits waiting for the weekly digest. */
+export interface DigestState {
+  /** ISO time of the last digest, or of when the digest was switched on. */
+  lastPostedAt: string;
+  commits: Commit[];
+}
+
 export type State = Record<string, RepoState>;
+
+/** Kept beside the repos under a key no repo name ("owner/name") can take. */
+export function digestState(state: State): DigestState {
+  const s = state as unknown as Record<string, DigestState>;
+  return (s["#digest"] ??= { lastPostedAt: new Date().toISOString(), commits: [] });
+}
 
 export function loadState(file: string): State {
   try {

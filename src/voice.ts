@@ -32,6 +32,13 @@ export const voice = {
       "New and improved, made with care~",
       "All wrapped up with a little bow, nya~",
     ]),
+  /** Opens the weekly digest, which every following server sees. */
+  digestIntro: () =>
+    pick([
+      "Here's everything new this week, nya~",
+      "A whole week of updates, all in one place~ ♡",
+      "This week's changes, wrapped up together, nya~",
+    ]),
   deployed: (owner: string) =>
     pick([
       `<@${owner}> It's live!! Everything here shipped. I knew you could do it ♡`,
